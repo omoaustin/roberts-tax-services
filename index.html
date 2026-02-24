@@ -1261,7 +1261,7 @@
     AUTH:    'rts_auth_ts',
   };
 
-  const PASSWORD      = '9375112';
+  const PASSWORD_HASH = '6aa6d4293579b94685a5f02d26c4a80b391d11030cc152830b9ae6e0f39d9d1d';
   const AUTH_DURATION = 24 * 60 * 60 * 1000; // 24 hours in ms
 
   // Google Sheets connection
@@ -1603,6 +1603,14 @@ Answer Robert's questions about his clients concisely and helpfully. When listin
   // SECTION: AUTHENTICATION
   // ============================================================
 
+  async function checkPassword(input) {
+    const data   = new TextEncoder().encode(input);
+    const buffer = await crypto.subtle.digest('SHA-256', data);
+    const hex    = Array.from(new Uint8Array(buffer))
+                        .map(b => b.toString(16).padStart(2, '0')).join('');
+    return hex === PASSWORD_HASH;
+  }
+
   function isAuthenticated() {
     const ts = parseInt(localStorage.getItem(STORAGE_KEYS.AUTH) || '0', 10);
     return ts && (Date.now() - ts) < AUTH_DURATION;
@@ -1624,8 +1632,8 @@ Answer Robert's questions about his clients concisely and helpfully. When listin
     const btn     = document.getElementById('lock-submit-btn');
     const errorEl = document.getElementById('lock-error');
 
-    const attempt = () => {
-      if ((input.value || '') === PASSWORD) {
+    const attempt = async () => {
+      if (await checkPassword(input.value || '')) {
         storeAuth();
         lockEl.style.display = 'none';
         init();
