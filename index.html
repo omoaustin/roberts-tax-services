@@ -935,9 +935,56 @@
 
     #refresh-btn:active { opacity: 0.5; }
     #refresh-btn:disabled { opacity: 0.35; }
+
+    /* ── Lock Screen ── */
+    #lock-screen {
+      position: fixed; inset: 0; z-index: 9999;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .lock-card {
+      width: 100%; max-width: 340px;
+      display: flex; flex-direction: column; gap: 16px; align-items: center;
+    }
+    .lock-logo {
+      width: 64px; height: 64px; border-radius: 16px;
+      background: var(--green); color: #fff;
+      font-size: 22px; font-weight: 700; letter-spacing: -0.5px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .lock-title {
+      font-size: 20px; font-weight: 600; color: var(--text-primary);
+      letter-spacing: -0.3px;
+    }
+    .lock-card .text-input { width: 100%; text-align: center; }
+    .lock-card .btn-primary { width: 100%; }
+    .lock-error {
+      font-size: 13px; color: var(--red);
+      min-height: 18px; margin: -8px 0;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-8px); }
+      40%, 80% { transform: translateX(8px); }
+    }
+    .shake { animation: shake 0.4s ease; }
   </style>
 </head>
 <body>
+
+<!-- ==================== LOCK SCREEN ==================== -->
+<div id="lock-screen">
+  <div class="lock-card">
+    <div class="lock-logo">PR</div>
+    <div class="lock-title">Robert's Tax Services</div>
+    <input type="password" id="lock-password-input" class="text-input"
+      placeholder="Password" autocomplete="current-password"
+      autocorrect="off" autocapitalize="off" spellcheck="false">
+    <p id="lock-error" class="lock-error"></p>
+    <button id="lock-submit-btn" class="btn-primary">Unlock</button>
+  </div>
+</div>
 
 <div id="app">
 
@@ -1211,7 +1258,11 @@
   const STORAGE_KEYS = {
     API_KEY: 'rts_anthropic_api_key',
     THEME:   'rts_theme',
+    AUTH:    'rts_auth_ts',
   };
+
+  const PASSWORD      = '9375112';
+  const AUTH_DURATION = 24 * 60 * 60 * 1000; // 24 hours in ms
 
   // Google Sheets connection
   const SHEETS_API_KEY = 'AIzaSyCqyYsIQuZ-SVC5Fqzy-3gsK0fo8gv1aEI';
@@ -1548,7 +1599,50 @@ Answer Robert's questions about his clients concisely and helpfully. When listin
     loadData();
   }
 
-  document.addEventListener('DOMContentLoaded', init);
+  // ============================================================
+  // SECTION: AUTHENTICATION
+  // ============================================================
+
+  function isAuthenticated() {
+    const ts = parseInt(localStorage.getItem(STORAGE_KEYS.AUTH) || '0', 10);
+    return ts && (Date.now() - ts) < AUTH_DURATION;
+  }
+
+  function storeAuth() {
+    localStorage.setItem(STORAGE_KEYS.AUTH, String(Date.now()));
+  }
+
+  function initLockScreen() {
+    const lockEl = document.getElementById('lock-screen');
+    if (isAuthenticated()) {
+      lockEl.style.display = 'none';
+      init();
+      return;
+    }
+
+    const input   = document.getElementById('lock-password-input');
+    const btn     = document.getElementById('lock-submit-btn');
+    const errorEl = document.getElementById('lock-error');
+
+    const attempt = () => {
+      if ((input.value || '') === PASSWORD) {
+        storeAuth();
+        lockEl.style.display = 'none';
+        init();
+      } else {
+        input.value = '';
+        errorEl.textContent = 'Incorrect password.';
+        input.classList.add('shake');
+        setTimeout(() => input.classList.remove('shake'), 500);
+      }
+    };
+
+    btn.addEventListener('click', attempt);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') attempt(); });
+    input.focus();
+  }
+
+  document.addEventListener('DOMContentLoaded', initLockScreen);
 
   // ============================================================
   // SECTION 10: GOOGLE SHEETS — FETCH
