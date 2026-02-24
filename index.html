@@ -1558,7 +1558,7 @@ Answer Robert's questions about his clients concisely and helpfully. When listin
     const url =
       'https://sheets.googleapis.com/v4/spreadsheets/' +
       encodeURIComponent(SHEET_ID) +
-      '/values/A:K?key=' +
+      '/values/A:H?key=' +
       encodeURIComponent(SHEETS_API_KEY);
 
     const response = await fetch(url);
@@ -1598,18 +1598,20 @@ Answer Robert's questions about his clients concisely and helpfully. When listin
 
         const parseBool = (i) => { const v = cell(i).toLowerCase(); return v === 'yes' || v === 'y'; };
 
+        const paymentAmount = parseMoney(2);
+        const paymentStatus = cell(1);
         return {
           name:             cell(0),
-          paymentStatus:    cell(1),
-          paymentAmount:    parseMoney(2),
-          amountPaid:       parseMoney(3),
-          paymentDate:      cell(4),
-          isReturning:      parseBool(5),
-          wasLastYear:      parseBool(6),
-          extensionNeeded:  parseBool(7),
-          extensionFiled:   parseBool(8),
-          extendedDeadline: cell(9),
-          notes:            cell(10),
+          paymentStatus,
+          paymentAmount,
+          amountPaid:       paymentStatus.toLowerCase() === 'paid' ? paymentAmount : 0,
+          paymentDate:      cell(3),
+          isReturning:      parseBool(4),
+          wasLastYear:      parseBool(5),
+          extensionNeeded:  parseBool(6),
+          extensionFiled:   parseBool(7),
+          extendedDeadline: '',
+          notes:            '',
         };
       });
   }
