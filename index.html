@@ -975,7 +975,8 @@
 
 <!-- ==================== LOCK SCREEN ==================== -->
 <div id="lock-screen">
-  <div class="lock-card">
+  <!-- Unlock card (shown when password already set) -->
+  <div id="unlock-card" class="lock-card">
     <div class="lock-logo">PR</div>
     <div class="lock-title">Robert's Tax Services</div>
     <input type="password" id="lock-password-input" class="text-input"
@@ -983,6 +984,20 @@
       autocorrect="off" autocapitalize="off" spellcheck="false">
     <p id="lock-error" class="lock-error"></p>
     <button id="lock-submit-btn" class="btn-primary">Unlock</button>
+  </div>
+  <!-- Set-password card (shown on first run) -->
+  <div id="set-password-card" class="lock-card" style="display:none">
+    <div class="lock-logo">PR</div>
+    <div class="lock-title">Create a Password</div>
+    <p style="font-size:14px;color:var(--text-secondary);text-align:center;margin:-4px 0">Set a password to protect this app.</p>
+    <input type="password" id="set-password-input" class="text-input"
+      placeholder="New password" autocomplete="new-password"
+      autocorrect="off" autocapitalize="off" spellcheck="false">
+    <input type="password" id="set-password-confirm" class="text-input"
+      placeholder="Confirm password" autocomplete="new-password"
+      autocorrect="off" autocapitalize="off" spellcheck="false">
+    <p id="set-password-error" class="lock-error"></p>
+    <button id="set-password-btn" class="btn-primary">Set Password</button>
   </div>
 </div>
 
@@ -1215,6 +1230,28 @@
         </div>
       </div>
 
+      <div class="section-header">Change Password</div>
+      <div class="settings-group">
+        <div class="settings-row">
+          <div class="settings-label">Current Password</div>
+          <input type="password" id="chg-pw-current" class="text-input"
+            placeholder="Current password" autocomplete="current-password"
+            autocorrect="off" autocapitalize="off" spellcheck="false">
+          <div class="settings-label" style="margin-top:8px">New Password</div>
+          <input type="password" id="chg-pw-new" class="text-input"
+            placeholder="New password" autocomplete="new-password"
+            autocorrect="off" autocapitalize="off" spellcheck="false">
+          <div class="settings-label" style="margin-top:8px">Confirm New Password</div>
+          <input type="password" id="chg-pw-confirm" class="text-input"
+            placeholder="Confirm new password" autocomplete="new-password"
+            autocorrect="off" autocapitalize="off" spellcheck="false">
+          <div id="chg-pw-status" class="api-key-status"></div>
+        </div>
+        <div class="settings-row api-key-btn-row">
+          <button id="chg-pw-btn" class="btn-primary">Change Password</button>
+        </div>
+      </div>
+
       <div class="section-header">Data Source</div>
       <div class="settings-group">
         <div class="about-row">
@@ -1284,12 +1321,19 @@
   const STORAGE_KEYS = {
     API_KEY:    'rts_anthropic_api_key',
     SHEETS_KEY: 'rts_sheets_api_key',
+    PASSWORD:   'rts_password_hash',
     THEME:      'rts_theme',
     AUTH:       'rts_auth_ts',
   };
 
-  const PASSWORD_HASH = '6aa6d4293579b94685a5f02d26c4a80b391d11030cc152830b9ae6e0f39d9d1d';
   const AUTH_DURATION = 24 * 60 * 60 * 1000; // 24 hours in ms
+
+  function getPasswordHash() {
+    return localStorage.getItem(STORAGE_KEYS.PASSWORD) || '';
+  }
+  function savePasswordHash(hash) {
+    localStorage.setItem(STORAGE_KEYS.PASSWORD, hash);
+  }
 
   // Google Sheets connection
   const SHEET_ID = '1-BLWPTF-JME8bP0dadZ8L6ZoUdLANu8QH-HQ14Hj7Mw';
@@ -1494,6 +1538,41 @@
     }
   }
 
+  function initChangePassword() {
+    const currentInput = document.getElementById('chg-pw-current');
+    const newInput     = document.getElementById('chg-pw-new');
+    const confirmInput = document.getElementById('chg-pw-confirm');
+    const btn          = document.getElementById('chg-pw-btn');
+    const status       = document.getElementById('chg-pw-status');
+
+    if (!btn) return;
+
+    btn.addEventListener('click', async () => {
+      const current = currentInput.value || '';
+      const pw      = newInput.value     || '';
+      const conf    = confirmInput.value || '';
+
+      status.style.color = 'var(--red)';
+
+      if (!current || !pw || !conf) {
+        status.textContent = 'Please fill in all fields.'; return;
+      }
+      if (!(await checkPassword(current))) {
+        status.textContent = 'Current password is incorrect.'; return;
+      }
+      if (pw !== conf) {
+        status.textContent = 'New passwords do not match.'; return;
+      }
+
+      savePasswordHash(await hashInput(pw));
+      currentInput.value = '';
+      newInput.value     = '';
+      confirmInput.value = '';
+      status.style.color   = 'var(--green)';
+      status.textContent   = '✓ Password updated';
+    });
+  }
+
   function renderSheetsKeyStatus(el) {
     if (!el) return;
     if (getSheetsKey().length > 0) {
@@ -1682,6 +1761,7 @@ Answer Robert's questions about his clients concisely and helpfully. When listin
     initNavigation();
     initSettings();
     initSheetsKeySettings();
+    initChangePassword();
     initAskAi();
     initFilterChips();
     initClientSearch();
@@ -1695,12 +1775,17 @@ Answer Robert's questions about his clients concisely and helpfully. When listin
   // SECTION: AUTHENTICATION
   // ============================================================
 
-  async function checkPassword(input) {
+  async function hashInput(input) {
     const data   = new TextEncoder().encode(input);
     const buffer = await crypto.subtle.digest('SHA-256', data);
-    const hex    = Array.from(new Uint8Array(buffer))
-                        .map(b => b.toString(16).padStart(2, '0')).join('');
-    return hex === PASSWORD_HASH;
+    return Array.from(new Uint8Array(buffer))
+                .map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function checkPassword(input) {
+    const stored = getPasswordHash();
+    if (!stored) return false;
+    return (await hashInput(input)) === stored;
   }
 
   function isAuthenticated() {
@@ -1720,6 +1805,43 @@ Answer Robert's questions about his clients concisely and helpfully. When listin
       return;
     }
 
+    // First-run: no password stored yet — show Set Password card
+    if (!getPasswordHash()) {
+      document.getElementById('unlock-card').style.display    = 'none';
+      document.getElementById('set-password-card').style.display = 'flex';
+
+      const newInput  = document.getElementById('set-password-input');
+      const confInput = document.getElementById('set-password-confirm');
+      const setBtn    = document.getElementById('set-password-btn');
+      const errEl     = document.getElementById('set-password-error');
+
+      const setPassword = async () => {
+        const pw   = newInput.value  || '';
+        const conf = confInput.value || '';
+        if (!pw) {
+          errEl.textContent = 'Please enter a password.';
+          return;
+        }
+        if (pw !== conf) {
+          errEl.textContent = 'Passwords do not match.';
+          confInput.value = '';
+          confInput.classList.add('shake');
+          setTimeout(() => confInput.classList.remove('shake'), 500);
+          return;
+        }
+        savePasswordHash(await hashInput(pw));
+        storeAuth();
+        lockEl.style.display = 'none';
+        init();
+      };
+
+      setBtn.addEventListener('click', setPassword);
+      confInput.addEventListener('keydown', e => { if (e.key === 'Enter') setPassword(); });
+      newInput.focus();
+      return;
+    }
+
+    // Normal unlock flow
     const input   = document.getElementById('lock-password-input');
     const btn     = document.getElementById('lock-submit-btn');
     const errorEl = document.getElementById('lock-error');
