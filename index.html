@@ -1189,6 +1189,32 @@
         </div>
       </div>
 
+      <div class="section-header">Google Sheets API Key</div>
+      <div class="settings-group">
+        <div class="settings-row">
+          <div class="settings-label">API Key</div>
+          <div class="api-key-input-wrap">
+            <input
+              type="password"
+              id="sheets-key-input"
+              class="text-input"
+              placeholder="AIzaSy..."
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+            >
+            <button id="sheets-key-show-btn" class="api-key-show-btn" type="button" aria-label="Show Sheets API key">Show</button>
+          </div>
+          <div class="settings-note">Stored locally on this device only. Never committed to code.</div>
+          <div id="sheets-key-status" class="api-key-status"></div>
+        </div>
+        <div class="settings-row api-key-btn-row">
+          <button id="sheets-key-save-btn" class="btn-primary">Save Key</button>
+          <button id="sheets-key-clear-btn" class="btn-danger">Clear Key</button>
+        </div>
+      </div>
+
       <div class="section-header">Data Source</div>
       <div class="settings-group">
         <div class="about-row">
@@ -1256,17 +1282,21 @@
   };
 
   const STORAGE_KEYS = {
-    API_KEY: 'rts_anthropic_api_key',
-    THEME:   'rts_theme',
-    AUTH:    'rts_auth_ts',
+    API_KEY:    'rts_anthropic_api_key',
+    SHEETS_KEY: 'rts_sheets_api_key',
+    THEME:      'rts_theme',
+    AUTH:       'rts_auth_ts',
   };
 
   const PASSWORD_HASH = '6aa6d4293579b94685a5f02d26c4a80b391d11030cc152830b9ae6e0f39d9d1d';
   const AUTH_DURATION = 24 * 60 * 60 * 1000; // 24 hours in ms
 
   // Google Sheets connection
-  const SHEETS_API_KEY = 'AIzaSyCqyYsIQuZ-SVC5Fqzy-3gsK0fo8gv1aEI';
-  const SHEET_ID       = '1-BLWPTF-JME8bP0dadZ8L6ZoUdLANu8QH-HQ14Hj7Mw';
+  const SHEET_ID = '1-BLWPTF-JME8bP0dadZ8L6ZoUdLANu8QH-HQ14Hj7Mw';
+
+  function getSheetsKey() {
+    return localStorage.getItem(STORAGE_KEYS.SHEETS_KEY) || '';
+  }
 
   // App state
   let currentView = VIEWS.DASHBOARD;
@@ -1411,6 +1441,66 @@
       el.style.color = 'var(--green)';
     } else {
       el.textContent = 'No API key saved';
+      el.style.color = 'var(--text-secondary)';
+    }
+  }
+
+  function initSheetsKeySettings() {
+    const input    = document.getElementById('sheets-key-input');
+    const saveBtn  = document.getElementById('sheets-key-save-btn');
+    const clearBtn = document.getElementById('sheets-key-clear-btn');
+    const showBtn  = document.getElementById('sheets-key-show-btn');
+    const status   = document.getElementById('sheets-key-status');
+
+    if (!input || !saveBtn) return;
+
+    input.value = getSheetsKey();
+    renderSheetsKeyStatus(status);
+
+    showBtn?.addEventListener('click', () => {
+      const revealing = input.type === 'password';
+      input.type = revealing ? 'text' : 'password';
+      if (showBtn) showBtn.textContent = revealing ? 'Hide' : 'Show';
+    });
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        saveSheetsKey(input.value);
+        renderSheetsKeyStatus(status);
+        input.blur();
+      }
+    });
+
+    saveBtn.addEventListener('click', () => {
+      saveSheetsKey(input.value);
+      renderSheetsKeyStatus(status);
+    });
+
+    clearBtn.addEventListener('click', () => {
+      saveSheetsKey('');
+      input.value = '';
+      input.type = 'password';
+      if (showBtn) showBtn.textContent = 'Show';
+      renderSheetsKeyStatus(status);
+    });
+  }
+
+  function saveSheetsKey(key) {
+    const trimmed = (key || '').trim();
+    if (trimmed) {
+      localStorage.setItem(STORAGE_KEYS.SHEETS_KEY, trimmed);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.SHEETS_KEY);
+    }
+  }
+
+  function renderSheetsKeyStatus(el) {
+    if (!el) return;
+    if (getSheetsKey().length > 0) {
+      el.textContent = '✓ Sheets key saved';
+      el.style.color = 'var(--green)';
+    } else {
+      el.textContent = 'No Sheets key saved';
       el.style.color = 'var(--text-secondary)';
     }
   }
@@ -1591,6 +1681,7 @@ Answer Robert's questions about his clients concisely and helpfully. When listin
     initTheme();
     initNavigation();
     initSettings();
+    initSheetsKeySettings();
     initAskAi();
     initFilterChips();
     initClientSearch();
@@ -1658,11 +1749,14 @@ Answer Robert's questions about his clients concisely and helpfully. When listin
   // ============================================================
 
   async function fetchSheetData() {
+    const sheetsKey = getSheetsKey();
+    if (!sheetsKey) throw new Error('No Sheets API key set — add your key in Settings.');
+
     const url =
       'https://sheets.googleapis.com/v4/spreadsheets/' +
       encodeURIComponent(SHEET_ID) +
       '/values/A:H?key=' +
-      encodeURIComponent(SHEETS_API_KEY);
+      encodeURIComponent(sheetsKey);
 
     const response = await fetch(url);
 
